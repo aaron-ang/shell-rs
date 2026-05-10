@@ -22,4 +22,8 @@ impl Completions {
     pub fn get(&self, command: &str) -> Option<String> {
         self.inner.read().unwrap().get(command).cloned()
     }
+
+    pub fn remove(&self, command: &str) {
+        self.inner.write().unwrap().remove(command);
+    }
 }

@@ -432,12 +432,12 @@ fn run_completer(
         .env("COMP_POINT", comp_point.to_string())
         .output()
         .ok()?;
-    Some(
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(String::from)
-            .collect(),
-    )
+    let mut lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(String::from)
+        .collect();
+    lines.sort();
+    Some(lines)
 }
 
 fn longest_common_prefix(strings: &[String]) -> String {

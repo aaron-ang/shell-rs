@@ -181,6 +181,12 @@ impl Command {
                 }
                 Ok(())
             }
+            Some("-r") => {
+                if let Some(cmd) = args.next() {
+                    self.shell.completions.remove(cmd);
+                }
+                Ok(())
+            }
             Some("-p") => {
                 if let Some(cmd) = args.next() {
                     match self.shell.completions.get(cmd) {
