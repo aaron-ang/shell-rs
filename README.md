@@ -9,7 +9,7 @@ A Unix-like shell implementation in Rust, built for the [Build Your Own Shell](h
 ## Features
 
 | Area            | Capabilities                                                                                       |
-| --------------- | -------------------------------------------------------------------------------------------------- |
+| --------------- | -------------------------------------------------------------------------------------------------- | -------- |
 | **Commands**    | Built-ins (`cd`, `echo`, `exit`, `history`, `pwd`, `type`) and external programs from `PATH`       |
 | **Editing**     | Arrow keys (←/→), backspace, insert at cursor; full line redraw keeps display in sync              |
 | **History**     | Persistent history via `HISTFILE`; ↑/↓ to navigate; `history` built-in with `-c`, `-r`, `-w`, `-a` |

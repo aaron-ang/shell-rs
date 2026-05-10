@@ -17,6 +17,7 @@ use crate::shell::Shell;
 #[strum(ascii_case_insensitive)]
 pub enum Builtin {
     Cd,
+    Complete,
     Echo,
     Exit,
     History,
@@ -91,6 +92,7 @@ impl Command {
         match Builtin::try_from(self.name.as_str()) {
             Ok(builtin) => match builtin {
                 Builtin::Cd => self.handle_cd(),
+                Builtin::Complete => self.handle_complete(),
                 Builtin::Echo => self.handle_echo(),
                 Builtin::Exit => self.handle_exit(),
                 Builtin::History => self.handle_history(),
@@ -165,6 +167,34 @@ impl Command {
                     self.print_err(format!("history: {arg}: numeric argument required"))
                 }
             }
+        }
+    }
+
+    fn handle_complete(&mut self) -> Result<()> {
+        let mut args = self.args.iter().map(String::as_str);
+        match args.next() {
+            Some("-C") => {
+                if let (Some(path), Some(cmd)) = (args.next(), args.next()) {
+                    self.shell
+                        .completions
+                        .register(cmd.to_string(), path.to_string());
+                }
+                Ok(())
+            }
+            Some("-p") => {
+                if let Some(cmd) = args.next() {
+                    match self.shell.completions.get(cmd) {
+                        Some(path) => self.print_out(format!("complete -C '{path}' {cmd}"))?,
+                        None => {
+                            self.print_err(format!(
+                                "complete: {cmd}: no completion specification"
+                            ))?;
+                        }
+                    }
+                }
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 

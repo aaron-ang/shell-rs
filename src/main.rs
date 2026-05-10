@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 mod command;
+mod completion;
 mod history;
 mod job;
 mod pipeline;

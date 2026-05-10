@@ -1,3 +1,4 @@
+use crate::completion::Completions;
 use crate::history::History;
 use crate::job::Jobs;
 
@@ -5,6 +6,7 @@ use crate::job::Jobs;
 pub struct Shell {
     pub history: History,
     pub jobs: Jobs,
+    pub completions: Completions,
 }
 
 impl Shell {
@@ -12,6 +14,7 @@ impl Shell {
         Self {
             history: History::open(),
             jobs: Jobs::new(),
+            completions: Completions::new(),
         }
     }
 }
