@@ -31,7 +31,12 @@ impl Pipeline {
         let mut cmd = Command::new(self.shell.clone());
         for token in tokens {
             match token {
-                Token::Arg(arg) => cmd.push_arg(&arg),
+                Token::Arg(arg) => {
+                    let expanded = self.shell.variables.expand(&arg);
+                    if !expanded.is_empty() {
+                        cmd.push_arg(&expanded);
+                    }
+                }
                 Token::Pipe => {
                     if cmd.is_empty() {
                         return Err(anyhow!("Empty command before pipe"));

@@ -18,6 +18,7 @@ use crate::shell::Shell;
 pub enum Builtin {
     Cd,
     Complete,
+    Declare,
     Echo,
     Exit,
     History,
@@ -93,6 +94,7 @@ impl Command {
             Ok(builtin) => match builtin {
                 Builtin::Cd => self.handle_cd(),
                 Builtin::Complete => self.handle_complete(),
+                Builtin::Declare => self.handle_declare(),
                 Builtin::Echo => self.handle_echo(),
                 Builtin::Exit => self.handle_exit(),
                 Builtin::History => self.handle_history(),
@@ -168,6 +170,32 @@ impl Command {
                 }
             }
         }
+    }
+
+    fn handle_declare(&mut self) -> Result<()> {
+        let mut args = self.args.iter().map(String::as_str);
+        match args.next() {
+            Some("-p") => {
+                if let Some(name) = args.next() {
+                    match self.shell.variables.get(name) {
+                        Some(value) => self.print_out(format!("declare -- {name}=\"{value}\""))?,
+                        None => self.print_err(format!("declare: {name}: not found"))?,
+                    }
+                }
+            }
+            Some(spec) => {
+                let (name, value) = spec.split_once('=').unwrap_or((spec, ""));
+                if is_valid_identifier(name) {
+                    self.shell
+                        .variables
+                        .set(name.to_string(), value.to_string());
+                } else {
+                    self.print_err(format!("declare: `{spec}': not a valid identifier"))?;
+                }
+            }
+            None => {}
+        }
+        Ok(())
     }
 
     fn handle_complete(&mut self) -> Result<()> {
@@ -265,6 +293,16 @@ impl Command {
     fn print_err(&mut self, msg: impl Display) -> Result<()> {
         writeln!(self.err, "{msg}")?;
         Ok(())
+    }
+}
+
+fn is_valid_identifier(name: &str) -> bool {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {
+            chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        }
+        _ => false,
     }
 }
 
@@ -396,5 +434,91 @@ mod tests {
         rm.execute().unwrap();
         assert_eq!(out.as_string(), "");
         assert_eq!(err.as_string(), "");
+    }
+
+    fn declare_cmd(shell: Shell, args: &[&str]) -> (Command, CaptureBuf, CaptureBuf) {
+        let mut c = Command::new(shell);
+        c.push_arg("declare");
+        for a in args {
+            c.push_arg(a);
+        }
+        let out = CaptureBuf::default();
+        let err = CaptureBuf::default();
+        c.set_output(out.clone());
+        c.set_err(err.clone());
+        (c, out, err)
+    }
+
+    #[test]
+    fn declare_p_missing_prints_error_to_stderr() {
+        let (mut c, out, err) = declare_cmd(Shell::new(), &["-p", "missing"]);
+        c.execute().unwrap();
+        assert_eq!(out.as_string(), "");
+        assert_eq!(err.as_string(), "declare: missing: not found\n");
+    }
+
+    #[test]
+    fn declare_set_then_p_prints_value() {
+        let shell = Shell::new();
+        let (mut set, _, _) = declare_cmd(shell.clone(), &["foo=bar"]);
+        set.execute().unwrap();
+        let (mut q, out, err) = declare_cmd(shell, &["-p", "foo"]);
+        q.execute().unwrap();
+        assert_eq!(out.as_string(), "declare -- foo=\"bar\"\n");
+        assert_eq!(err.as_string(), "");
+    }
+
+    #[test]
+    fn declare_rejects_digit_start_identifier() {
+        let shell = Shell::new();
+        let (mut c, out, err) = declare_cmd(shell.clone(), &["23=x"]);
+        c.execute().unwrap();
+        assert_eq!(out.as_string(), "");
+        assert_eq!(err.as_string(), "declare: `23=x': not a valid identifier\n");
+        assert_eq!(shell.variables.get("23"), None);
+    }
+
+    #[test]
+    fn declare_accepts_underscore_start_identifier() {
+        let shell = Shell::new();
+        let (mut set, _, _) = declare_cmd(shell.clone(), &["_FOO=bar"]);
+        set.execute().unwrap();
+        let (mut q, out, _) = declare_cmd(shell, &["-p", "_FOO"]);
+        q.execute().unwrap();
+        assert_eq!(out.as_string(), "declare -- _FOO=\"bar\"\n");
+    }
+
+    #[test]
+    fn is_valid_identifier_rules() {
+        assert!(is_valid_identifier("foo"));
+        assert!(is_valid_identifier("_foo"));
+        assert!(is_valid_identifier("FOO_BAR_2"));
+        assert!(!is_valid_identifier(""));
+        assert!(!is_valid_identifier("2foo"));
+        assert!(!is_valid_identifier("foo-bar"));
+        assert!(!is_valid_identifier("foo.bar"));
+    }
+
+    #[test]
+    fn declare_overwrites_existing_value() {
+        let shell = Shell::new();
+        for v in ["foo=bar", "foo=bar2"] {
+            let (mut c, _, _) = declare_cmd(shell.clone(), &[v]);
+            c.execute().unwrap();
+        }
+        let (mut q, out, _) = declare_cmd(shell, &["-p", "foo"]);
+        q.execute().unwrap();
+        assert_eq!(out.as_string(), "declare -- foo=\"bar2\"\n");
+    }
+
+    #[test]
+    fn type_declare_is_shell_builtin() {
+        let mut c = Command::new(Shell::new());
+        c.push_arg("type");
+        c.push_arg("declare");
+        let out = CaptureBuf::default();
+        c.set_output(out.clone());
+        c.execute().unwrap();
+        assert_eq!(out.as_string(), "declare is a shell builtin\n");
     }
 }

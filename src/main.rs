@@ -8,6 +8,7 @@ mod pipeline;
 mod shell;
 mod state;
 mod token;
+mod variable;
 use state::Terminal;
 
 fn main() -> Result<()> {
