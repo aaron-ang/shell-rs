@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::HashMap,
     sync::{Arc, RwLock},
 };
@@ -23,7 +24,10 @@ impl Variables {
         self.inner.read().unwrap().get(name).cloned()
     }
 
-    pub fn expand(&self, s: &str) -> String {
+    pub fn expand<'a>(&self, s: &'a str) -> Cow<'a, str> {
+        if !s.contains('$') {
+            return Cow::Borrowed(s);
+        }
         let mut out = String::new();
         let mut chars = s.chars().peekable();
         while let Some(c) = chars.next() {
@@ -64,7 +68,7 @@ impl Variables {
                 out.push_str(&val);
             }
         }
-        out
+        Cow::Owned(out)
     }
 }
 
