@@ -1,27 +1,23 @@
-use std::{
-    borrow::Cow,
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Clone)]
 pub struct Variables {
-    inner: Arc<RwLock<HashMap<String, String>>>,
+    inner: Rc<RefCell<HashMap<String, String>>>,
 }
 
 impl Variables {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(RwLock::new(HashMap::new())),
+            inner: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
     pub fn set(&self, name: String, value: String) {
-        self.inner.write().unwrap().insert(name, value);
+        self.inner.borrow_mut().insert(name, value);
     }
 
     pub fn get(&self, name: &str) -> Option<String> {
-        self.inner.read().unwrap().get(name).cloned()
+        self.inner.borrow().get(name).cloned()
     }
 
     pub fn expand<'a>(&self, s: &'a str) -> Cow<'a, str> {

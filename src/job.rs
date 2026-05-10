@@ -1,8 +1,4 @@
-use std::{
-    io::Write,
-    process::Child,
-    sync::{Arc, RwLock},
-};
+use std::{cell::RefCell, io::Write, process::Child, rc::Rc};
 
 use anyhow::Result;
 
@@ -20,18 +16,18 @@ struct JobEntry {
 
 #[derive(Clone)]
 pub struct Jobs {
-    inner: Arc<RwLock<Vec<JobEntry>>>,
+    inner: Rc<RefCell<Vec<JobEntry>>>,
 }
 
 impl Jobs {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(RwLock::new(Vec::new())),
+            inner: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
     pub fn add(&self, child: Child, command: String) -> usize {
-        let mut entries = self.inner.write().unwrap();
+        let mut entries = self.inner.borrow_mut();
         let pos = entries
             .iter()
             .enumerate()
@@ -52,7 +48,7 @@ impl Jobs {
 
     /// Check for exited jobs, print Done lines, and remove them.
     pub fn reap<W: Write>(&self, writer: &mut W) -> Result<()> {
-        let mut entries = self.inner.write().unwrap();
+        let mut entries = self.inner.borrow_mut();
         // Check for newly finished processes
         for entry in entries.iter_mut() {
             if let Status::Running = entry.status
@@ -79,7 +75,7 @@ impl Jobs {
 
     /// Check statuses, list all jobs in order, then remove Done ones.
     pub fn print<W: Write>(&self, writer: &mut W) -> Result<()> {
-        let mut entries = self.inner.write().unwrap();
+        let mut entries = self.inner.borrow_mut();
         for entry in entries.iter_mut() {
             if let Status::Running = entry.status
                 && entry.child.try_wait()?.is_some()
@@ -184,7 +180,7 @@ mod tests {
 
         let output = reap_jobs(&jobs);
         assert!(output.is_empty());
-        let len = jobs.inner.read().unwrap().len();
+        let len = jobs.inner.borrow().len();
         assert_eq!(len, 1);
     }
 

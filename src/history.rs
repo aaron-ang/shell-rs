@@ -1,9 +1,10 @@
 use std::{
+    cell::RefCell,
     env,
     fs::{self, File},
     io::{BufWriter, Write},
     path::Path,
-    sync::{Arc, RwLock},
+    rc::Rc,
 };
 
 use anyhow::Result;
@@ -12,7 +13,7 @@ const HISTFILE_ENV: &str = "HISTFILE";
 
 #[derive(Clone)]
 pub struct History {
-    inner: Arc<RwLock<HistoryData>>,
+    inner: Rc<RefCell<HistoryData>>,
 }
 
 struct HistoryData {
@@ -32,38 +33,38 @@ impl History {
             append_index: len,
         };
         History {
-            inner: Arc::new(RwLock::new(data)),
+            inner: Rc::new(RefCell::new(data)),
         }
     }
 
     pub fn len(&self) -> usize {
-        self.inner.read().unwrap().entries.len()
+        self.inner.borrow().entries.len()
     }
 
     pub fn add(&mut self, command: String) {
         if command.is_empty() {
             return;
         }
-        self.inner.write().unwrap().entries.push(command);
+        self.inner.borrow_mut().entries.push(command);
     }
 
     pub fn get(&self, index: usize) -> Option<String> {
-        self.inner.read().unwrap().entries.get(index).cloned()
+        self.inner.borrow().entries.get(index).cloned()
     }
 
     pub fn set(&mut self, index: usize, command: String) {
-        let mut data = self.inner.write().unwrap();
+        let mut data = self.inner.borrow_mut();
         if index < data.entries.len() {
             data.entries[index] = command;
         }
     }
 
     pub fn clear(&mut self) {
-        self.inner.write().unwrap().entries.clear();
+        self.inner.borrow_mut().entries.clear();
     }
 
     pub fn print<W: Write>(&self, writer: &mut W, limit: Option<usize>) -> Result<()> {
-        let data = self.inner.read().unwrap();
+        let data = self.inner.borrow();
         let limit = limit.unwrap_or(data.entries.len());
         let start = data.entries.len().saturating_sub(limit);
         for (i, cmd) in data.entries.iter().skip(start).enumerate() {
@@ -81,14 +82,14 @@ impl History {
         let new_entries = fs::read_to_string(path)
             .map(|s| s.lines().map(String::from).collect::<Vec<_>>())
             .unwrap_or_default();
-        let mut data = self.inner.write().unwrap();
+        let mut data = self.inner.borrow_mut();
         data.entries.extend(new_entries);
     }
 
     pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
-        for entry in &self.inner.read().unwrap().entries {
+        for entry in &self.inner.borrow().entries {
             writeln!(writer, "{entry}")?;
         }
         writer.flush()?;
@@ -96,7 +97,7 @@ impl History {
     }
 
     pub fn append_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let mut data = self.inner.write().unwrap();
+        let mut data = self.inner.borrow_mut();
         let file = fs::OpenOptions::new()
             .append(true)
             .create(true)
@@ -119,7 +120,7 @@ mod tests {
 
     fn empty_history() -> History {
         History {
-            inner: Arc::new(RwLock::new(HistoryData {
+            inner: Rc::new(RefCell::new(HistoryData {
                 entries: Vec::new(),
                 append_index: 0,
             })),
