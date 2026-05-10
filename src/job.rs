@@ -55,10 +55,10 @@ impl Jobs {
         let mut entries = self.inner.write().unwrap();
         // Check for newly finished processes
         for entry in entries.iter_mut() {
-            if let Status::Running = entry.status {
-                if entry.child.try_wait()?.is_some() {
-                    entry.status = Status::Done;
-                }
+            if let Status::Running = entry.status
+                && entry.child.try_wait()?.is_some()
+            {
+                entry.status = Status::Done;
             }
         }
         // Print and remove done jobs
@@ -81,10 +81,10 @@ impl Jobs {
     pub fn print<W: Write>(&self, writer: &mut W) -> Result<()> {
         let mut entries = self.inner.write().unwrap();
         for entry in entries.iter_mut() {
-            if let Status::Running = entry.status {
-                if entry.child.try_wait()?.is_some() {
-                    entry.status = Status::Done;
-                }
+            if let Status::Running = entry.status
+                && entry.child.try_wait()?.is_some()
+            {
+                entry.status = Status::Done;
             }
         }
         let len = entries.len();

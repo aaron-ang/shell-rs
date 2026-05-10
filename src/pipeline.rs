@@ -1,11 +1,11 @@
 use std::{fs, path::PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use os_pipe::pipe;
 
 use crate::command::Command;
 use crate::shell::Shell;
-use crate::token::{tokenize, RedirectType, Token};
+use crate::token::{RedirectType, Token, tokenize};
 
 pub struct Pipeline {
     commands: Vec<Command>,

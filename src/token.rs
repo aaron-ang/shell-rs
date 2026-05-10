@@ -5,7 +5,7 @@ use std::{
     str,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 pub enum Token {
     Arg(String),
@@ -83,13 +83,14 @@ fn parse_quoted_string(iter: &mut impl Iterator<Item = char>, quote: char) -> (S
         if ch == quote {
             return (chunk, true);
         }
-        if ch == '\\' && quote == '"' {
-            if let Some(next_ch) = iter.next() {
-                if !matches!(next_ch, '$' | '`' | '"' | '\\' | '\n') {
-                    chunk.push('\\');
-                }
-                ch = next_ch;
+        if ch == '\\'
+            && quote == '"'
+            && let Some(next_ch) = iter.next()
+        {
+            if !matches!(next_ch, '$' | '`' | '"' | '\\' | '\n') {
+                chunk.push('\\');
             }
+            ch = next_ch;
         }
         chunk.push(ch);
     }

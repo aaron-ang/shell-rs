@@ -241,6 +241,11 @@ impl Terminal {
 
     fn handle_tab(&mut self) -> Result<()> {
         let prefix = self.input[..self.cursor_pos].iter().collect::<String>();
+        let comp_line: String = self.input.iter().collect();
+        let comp_point: usize = self.input[..self.cursor_pos]
+            .iter()
+            .map(|c| c.len_utf8())
+            .sum();
         let completion_token = prefix.split(' ').next_back().unwrap_or("");
         let matches = match &self.completion {
             Some(c) if c.prefix == prefix => c.matches.clone(),
@@ -248,7 +253,7 @@ impl Terminal {
                 if prefix == "." || prefix == ".." {
                     vec![prefix.clone() + "/"]
                 } else {
-                    self.get_matches(&prefix)
+                    self.get_matches(&prefix, &comp_line, comp_point)
                 }
             }
         };
@@ -282,13 +287,21 @@ impl Terminal {
         Ok(())
     }
 
-    fn get_matches(&self, prefix: &str) -> Vec<String> {
-        let last_token = prefix.split(' ').next_back().unwrap_or("");
-        if let Some((first, _)) = prefix.split_once(' ')
+    fn get_matches(&self, prefix: &str, comp_line: &str, comp_point: usize) -> Vec<String> {
+        let tokens: Vec<&str> = prefix.split(' ').collect();
+        let last_token = tokens.last().copied().unwrap_or("");
+        if let Some(first) = tokens.first().filter(|_| tokens.len() > 1)
             && let Some(script) = self.shell.completions.get(first)
-            && let Some(lines) = run_completer(&script)
         {
-            return lines;
+            let prev = tokens
+                .get(tokens.len().saturating_sub(2))
+                .copied()
+                .unwrap_or("");
+            if let Some(lines) =
+                run_completer(&script, first, last_token, prev, comp_line, comp_point)
+            {
+                return lines;
+            }
         }
         // Complete as files if there's a path separator or it's not the first word
         if last_token.contains('/') || prefix.contains(' ') {
@@ -362,10 +375,10 @@ fn find_matching_executables(prefix: &str) -> Vec<String> {
         for dir in env::split_paths(&path) {
             if let Ok(entries) = fs::read_dir(dir) {
                 for entry in entries.filter_map(Result::ok) {
-                    if let Some(name) = entry.file_name().to_str() {
-                        if name.starts_with(prefix) {
-                            matches.push(name.to_string());
-                        }
+                    if let Some(name) = entry.file_name().to_str()
+                        && name.starts_with(prefix)
+                    {
+                        matches.push(name.to_string());
                     }
                 }
             }
@@ -389,15 +402,15 @@ fn find_matching_files(prefix: &str) -> Vec<String> {
     };
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.filter_map(Result::ok) {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.starts_with(stem) {
-                    let mut candidate = name.to_string();
-                    // Add trailing slash if it's a directory
-                    if entry.file_type().is_ok_and(|ft| ft.is_dir()) {
-                        candidate.push('/');
-                    }
-                    matches.push(candidate);
+            if let Some(name) = entry.file_name().to_str()
+                && name.starts_with(stem)
+            {
+                let mut candidate = name.to_string();
+                // Add trailing slash if it's a directory
+                if entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+                    candidate.push('/');
                 }
+                matches.push(candidate);
             }
         }
     }
@@ -405,8 +418,20 @@ fn find_matching_files(prefix: &str) -> Vec<String> {
     matches
 }
 
-fn run_completer(script: &str) -> Option<Vec<String>> {
-    let output = process::Command::new(script).output().ok()?;
+fn run_completer(
+    script: &str,
+    cmd: &str,
+    current: &str,
+    prev: &str,
+    comp_line: &str,
+    comp_point: usize,
+) -> Option<Vec<String>> {
+    let output = process::Command::new(script)
+        .args([cmd, current, prev])
+        .env("COMP_LINE", comp_line)
+        .env("COMP_POINT", comp_point.to_string())
+        .output()
+        .ok()?;
     Some(
         String::from_utf8_lossy(&output.stdout)
             .lines()
