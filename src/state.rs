@@ -426,12 +426,25 @@ fn run_completer(
     comp_line: &str,
     comp_point: usize,
 ) -> Option<Vec<String>> {
-    let output = process::Command::new(script)
-        .args([cmd, current, prev])
-        .env("COMP_LINE", comp_line)
-        .env("COMP_POINT", comp_point.to_string())
-        .output()
-        .ok()?;
+    // Linux ETXTBSY race: a sibling thread's fork+exec window can briefly
+    // hold a writer fd open on this script, blocking exec. Retry a few times.
+    const ETXTBSY: i32 = 26;
+    let mut attempt = 0;
+    let output = loop {
+        match process::Command::new(script)
+            .args([cmd, current, prev])
+            .env("COMP_LINE", comp_line)
+            .env("COMP_POINT", comp_point.to_string())
+            .output()
+        {
+            Ok(o) => break o,
+            Err(e) if e.raw_os_error() == Some(ETXTBSY) && attempt < 5 => {
+                attempt += 1;
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            Err(_) => return None,
+        }
+    };
     let mut lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(String::from)
