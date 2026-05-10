@@ -9,7 +9,7 @@
 name = "codecrafters-shell"
 version = "0.1.0"
 authors = ["Codecrafters <hello@codecrafters.io>"]
-edition = "2021"
+edition = "2024"
 
 # DON'T EDIT THIS!
 #

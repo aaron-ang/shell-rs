@@ -1,6 +1,7 @@
 use std::{
     env, fs,
     io::{self, Write},
+    process,
 };
 
 use anyhow::Result;
@@ -281,9 +282,14 @@ impl Terminal {
         Ok(())
     }
 
-    #[allow(clippy::unused_self)]
     fn get_matches(&self, prefix: &str) -> Vec<String> {
         let last_token = prefix.split(' ').next_back().unwrap_or("");
+        if let Some((first, _)) = prefix.split_once(' ')
+            && let Some(script) = self.shell.completions.get(first)
+            && let Some(lines) = run_completer(&script)
+        {
+            return lines;
+        }
         // Complete as files if there's a path separator or it's not the first word
         if last_token.contains('/') || prefix.contains(' ') {
             find_matching_files(last_token)
@@ -397,6 +403,16 @@ fn find_matching_files(prefix: &str) -> Vec<String> {
     }
     matches.sort();
     matches
+}
+
+fn run_completer(script: &str) -> Option<Vec<String>> {
+    let output = process::Command::new(script).output().ok()?;
+    Some(
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(String::from)
+            .collect(),
+    )
 }
 
 fn longest_common_prefix(strings: &[String]) -> String {
