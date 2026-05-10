@@ -19,13 +19,10 @@ edition = "2024"
 #
 # DON'T EDIT THIS!
 [dependencies]
-anyhow = "1.0.102"                                    # error handling
-bytes = "1.11.1"                                      # helps manage buffers
-is_executable = "1.0.5"
-os_pipe = "1.2.3"
-strum = { version = "0.28.0", features = ["derive"] }
-termion = "4.0.6"
-thiserror = "2.0.18"                                  # error handling
+anyhow = "1.0"                                      # error handling
+os_pipe = "1.2"
+strum = { version = "0.28", features = ["derive"] }
+termion = "4.0"
 
 [dev-dependencies]
-tempfile = "3.27.0"
+tempfile = "3.27"

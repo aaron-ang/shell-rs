@@ -3,12 +3,12 @@ use std::{
     fmt::Display,
     io::{self, Write},
     mem,
-    path::PathBuf,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
     process, str,
 };
 
 use anyhow::Result;
-use is_executable::IsExecutable;
 use strum::{Display, EnumIter, EnumString};
 
 use crate::shell::Shell;
@@ -142,16 +142,16 @@ impl Command {
     }
 
     fn handle_history(&mut self) -> Result<()> {
-        let mut args = self.args.iter().map(String::as_str);
-        match args.next() {
-            None => self.shell.history.print(&mut self.output, None),
-            Some("-c") => {
+        let args: Vec<&str> = self.args.iter().map(String::as_str).collect();
+        match args.as_slice() {
+            [] => self.shell.history.print(&mut self.output, None),
+            ["-c"] => {
                 self.shell.history.clear();
                 Ok(())
             }
-            Some(opt @ ("-r" | "-w" | "-a")) => {
-                let file = args.next().map(PathBuf::from).unwrap_or_default();
-                match opt {
+            [opt @ ("-r" | "-w" | "-a"), rest @ ..] => {
+                let file = rest.first().map(PathBuf::from).unwrap_or_default();
+                match *opt {
                     "-r" => self.shell.history.append_from_file(file),
                     "-w" => self.shell.history.write_to_file(file)?,
                     "-a" => self.shell.history.append_to_file(file)?,
@@ -159,10 +159,10 @@ impl Command {
                 }
                 Ok(())
             }
-            Some(flag) if flag.starts_with('-') => {
+            [flag, ..] if flag.starts_with('-') => {
                 self.print_err(format!("history: {flag}: invalid option"))
             }
-            Some(arg) => {
+            [arg, ..] => {
                 if let Ok(n) = arg.parse::<usize>() {
                     self.shell.history.print(&mut self.output, Some(n))
                 } else {
@@ -173,61 +173,44 @@ impl Command {
     }
 
     fn handle_declare(&mut self) -> Result<()> {
-        let mut args = self.args.iter().map(String::as_str);
-        match args.next() {
-            Some("-p") => {
-                if let Some(name) = args.next() {
-                    match self.shell.variables.get(name) {
-                        Some(value) => self.print_out(format!("declare -- {name}=\"{value}\""))?,
-                        None => self.print_err(format!("declare: {name}: not found"))?,
-                    }
-                }
-            }
-            Some(spec) => {
+        let args: Vec<&str> = self.args.iter().map(String::as_str).collect();
+        match args.as_slice() {
+            ["-p", name] => match self.shell.variables.get(name) {
+                Some(value) => self.print_out(format!("declare -- {name}=\"{value}\"")),
+                None => self.print_err(format!("declare: {name}: not found")),
+            },
+            [spec] => {
                 let (name, value) = spec.split_once('=').unwrap_or((spec, ""));
                 if is_valid_identifier(name) {
                     self.shell
                         .variables
                         .set(name.to_string(), value.to_string());
+                    Ok(())
                 } else {
-                    self.print_err(format!("declare: `{spec}': not a valid identifier"))?;
+                    self.print_err(format!("declare: `{spec}': not a valid identifier"))
                 }
             }
-            None => {}
+            _ => Ok(()),
         }
-        Ok(())
     }
 
     fn handle_complete(&mut self) -> Result<()> {
-        let mut args = self.args.iter().map(String::as_str);
-        match args.next() {
-            Some("-C") => {
-                if let (Some(path), Some(cmd)) = (args.next(), args.next()) {
-                    self.shell
-                        .completions
-                        .register(cmd.to_string(), path.to_string());
-                }
+        let args: Vec<&str> = self.args.iter().map(String::as_str).collect();
+        match args.as_slice() {
+            ["-C", path, cmd] => {
+                self.shell
+                    .completions
+                    .register((*cmd).to_string(), (*path).to_string());
                 Ok(())
             }
-            Some("-r") => {
-                if let Some(cmd) = args.next() {
-                    self.shell.completions.remove(cmd);
-                }
+            ["-r", cmd] => {
+                self.shell.completions.remove(cmd);
                 Ok(())
             }
-            Some("-p") => {
-                if let Some(cmd) = args.next() {
-                    match self.shell.completions.get(cmd) {
-                        Some(path) => self.print_out(format!("complete -C '{path}' {cmd}"))?,
-                        None => {
-                            self.print_err(format!(
-                                "complete: {cmd}: no completion specification"
-                            ))?;
-                        }
-                    }
-                }
-                Ok(())
-            }
+            ["-p", cmd] => match self.shell.completions.get(cmd) {
+                Some(path) => self.print_out(format!("complete -C '{path}' {cmd}")),
+                None => self.print_err(format!("complete: {cmd}: no completion specification")),
+            },
             _ => Ok(()),
         }
     }
@@ -276,7 +259,7 @@ impl Command {
         env::var("PATH").ok().and_then(|path_str| {
             env::split_paths(&path_str).find_map(|path| {
                 let full_path = path.join(cmd);
-                full_path.is_executable().then_some(full_path)
+                is_executable(&full_path).then_some(full_path)
             })
         })
     }
@@ -294,6 +277,14 @@ impl Command {
         writeln!(self.err, "{msg}")?;
         Ok(())
     }
+}
+
+/// User|group|other execute bits (POSIX `S_IXUSR | S_IXGRP | S_IXOTH`).
+const ANY_EXEC: u32 = 0o111;
+
+fn is_executable(path: &Path) -> bool {
+    path.metadata()
+        .is_ok_and(|m| m.is_file() && m.permissions().mode() & ANY_EXEC != 0)
 }
 
 fn is_valid_identifier(name: &str) -> bool {
