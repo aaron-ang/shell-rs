@@ -457,6 +457,9 @@ fn longest_common_prefix(strings: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
 
     #[test]
     fn lcp_common_prefix() {
@@ -486,5 +489,63 @@ mod tests {
     fn lcp_single_string() {
         let input = vec!["only".into()];
         assert_eq!(longest_common_prefix(&input), "only");
+    }
+
+    struct TestScript {
+        _dir: tempfile::TempDir,
+        path: PathBuf,
+    }
+    impl TestScript {
+        fn path(&self) -> &str {
+            self.path.to_str().unwrap()
+        }
+    }
+
+    // Serialize tests that fork+exec a freshly-written script.
+    static EXEC_LOCK: Mutex<()> = Mutex::new(());
+
+    fn make_script(content: &str) -> TestScript {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("completer.sh");
+        fs::write(&path, content).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        TestScript { _dir: dir, path }
+    }
+
+    #[test]
+    fn run_completer_passes_argv() {
+        let _lock = EXEC_LOCK.lock().unwrap();
+        let s = make_script("#!/bin/sh\necho \"$1|$2|$3\"\n");
+        let result = run_completer(s.path(), "git", "ad", "remote", "git remote ad", 13).unwrap();
+        assert_eq!(result, vec!["git|ad|remote".to_string()]);
+    }
+
+    #[test]
+    fn run_completer_passes_env_vars() {
+        let _lock = EXEC_LOCK.lock().unwrap();
+        let s = make_script("#!/bin/sh\necho \"$COMP_LINE|$COMP_POINT\"\n");
+        let result = run_completer(s.path(), "git", "ad", "", "git ad", 6).unwrap();
+        assert_eq!(result, vec!["git ad|6".to_string()]);
+    }
+
+    #[test]
+    fn run_completer_sorts_output() {
+        let _lock = EXEC_LOCK.lock().unwrap();
+        let s = make_script("#!/bin/sh\nprintf 'push\\ncommit\\nadd\\n'\n");
+        let result = run_completer(s.path(), "git", "", "", "git ", 4).unwrap();
+        assert_eq!(result, vec!["add", "commit", "push"]);
+    }
+
+    #[test]
+    fn run_completer_empty_output_returns_empty_vec() {
+        let _lock = EXEC_LOCK.lock().unwrap();
+        let s = make_script("#!/bin/sh\nexit 0\n");
+        let result = run_completer(s.path(), "git", "", "", "git ", 4).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn run_completer_missing_script_returns_none() {
+        assert!(run_completer("/nonexistent/path/xyz", "git", "", "", "git", 3).is_none());
     }
 }

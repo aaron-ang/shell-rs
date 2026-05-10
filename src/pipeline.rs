@@ -132,6 +132,15 @@ impl Pipeline {
     }
 }
 
+fn create_file(path: &PathBuf, append: bool) -> Result<fs::File> {
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true)
+        .create(true)
+        .truncate(!append)
+        .append(append);
+    Ok(opts.open(path)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,13 +189,4 @@ mod tests {
         assert!(!p.background);
         assert_eq!(p.commands.len(), 1);
     }
-}
-
-fn create_file(path: &PathBuf, append: bool) -> Result<fs::File> {
-    let mut opts = fs::OpenOptions::new();
-    opts.write(true)
-        .create(true)
-        .truncate(!append)
-        .append(append);
-    Ok(opts.open(path)?)
 }

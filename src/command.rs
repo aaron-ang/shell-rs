@@ -271,6 +271,8 @@ impl Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+
     fn cmd(args: &[&str]) -> Command {
         let mut c = Command::new(Shell::new());
         for a in args {
@@ -324,5 +326,75 @@ mod tests {
         let mut c = cmd(&["echo", "&", "hello"]);
         assert!(!c.pop_background_token());
         assert_eq!(c.args, &["&", "hello"]);
+    }
+
+    #[derive(Clone, Default)]
+    struct CaptureBuf(Arc<Mutex<Vec<u8>>>);
+    impl Write for CaptureBuf {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    impl CaptureBuf {
+        fn as_string(&self) -> String {
+            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+        }
+    }
+
+    fn complete_cmd(shell: Shell, args: &[&str]) -> (Command, CaptureBuf, CaptureBuf) {
+        let mut c = Command::new(shell);
+        c.push_arg("complete");
+        for a in args {
+            c.push_arg(a);
+        }
+        let out = CaptureBuf::default();
+        let err = CaptureBuf::default();
+        c.set_output(out.clone());
+        c.set_err(err.clone());
+        (c, out, err)
+    }
+
+    #[test]
+    fn complete_p_missing_prints_error_to_stderr() {
+        let (mut c, out, err) = complete_cmd(Shell::new(), &["-p", "git"]);
+        c.execute().unwrap();
+        assert_eq!(out.as_string(), "");
+        assert_eq!(
+            err.as_string(),
+            "complete: git: no completion specification\n"
+        );
+    }
+
+    #[test]
+    fn complete_c_then_p_prints_registered_spec() {
+        let shell = Shell::new();
+        let (mut reg, _, _) = complete_cmd(shell.clone(), &["-C", "/path/to/git", "git"]);
+        reg.execute().unwrap();
+        let (mut q, out, err) = complete_cmd(shell, &["-p", "git"]);
+        q.execute().unwrap();
+        assert_eq!(out.as_string(), "complete -C '/path/to/git' git\n");
+        assert_eq!(err.as_string(), "");
+    }
+
+    #[test]
+    fn complete_r_removes_registration() {
+        let shell = Shell::new();
+        shell.completions.register("git".into(), "/path".into());
+        let (mut rm, _, _) = complete_cmd(shell.clone(), &["-r", "git"]);
+        rm.execute().unwrap();
+        assert_eq!(shell.completions.get("git"), None);
+    }
+
+    #[test]
+    fn complete_r_absent_is_silent() {
+        let shell = Shell::new();
+        let (mut rm, out, err) = complete_cmd(shell, &["-r", "git"]);
+        rm.execute().unwrap();
+        assert_eq!(out.as_string(), "");
+        assert_eq!(err.as_string(), "");
     }
 }

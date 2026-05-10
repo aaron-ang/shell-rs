@@ -155,7 +155,7 @@ mod tests {
 
         let output = print_jobs(&jobs);
         assert!(output.contains("Done"));
-        assert!(!output.contains("&"));
+        assert!(!output.contains('&'));
 
         let output = print_jobs(&jobs);
         assert!(output.is_empty());
