@@ -247,15 +247,14 @@ impl Terminal {
             .map(|c| c.len_utf8())
             .sum();
         let completion_token = prefix.split(' ').next_back().unwrap_or("");
-        let matches = match &self.completion {
-            Some(c) if c.prefix == prefix => c.matches.clone(),
-            _ => {
-                if prefix == "." || prefix == ".." {
-                    vec![prefix.clone() + "/"]
-                } else {
-                    self.get_matches(&prefix, &comp_line, comp_point)
-                }
-            }
+        let matches = if let Some(c) = &self.completion
+            && c.prefix == prefix
+        {
+            c.matches.clone()
+        } else if prefix == "." || prefix == ".." {
+            vec![prefix.clone() + "/"]
+        } else {
+            self.get_matches(&prefix, &comp_line, comp_point)
         };
         match matches.len() {
             0 => write!(self.stdout, "{BELL}")?,
