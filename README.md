@@ -1,4 +1,4 @@
-# shell-rust
+# shell-rs
 
 A Unix-like shell implementation in Rust, built for the [Build Your Own Shell](https://app.codecrafters.io/courses/shell/overview) challenge on Codecrafters.
 
@@ -30,7 +30,7 @@ A Unix-like shell implementation in Rust, built for the [Build Your Own Shell](h
 cargo build --release
 
 # Run the shell
-./target/release/codecrafters-shell
+./target/release/shell-rs
 ```
 
 Or use the project script (builds then runs):
